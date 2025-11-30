@@ -52,6 +52,18 @@
   "create": "创建",
   "selectAlbum": "选择相册",
   "previousImage": "上一张",
-  "nextImage": "下一张"
+  "nextImage": "下一张",
+  "linkPhotosLibrary": "链接本地相册",
+  "linkPhotosLibraryTooltip": "链接 macOS Photos 相册",
+  "loadingPhotosLibrary": "正在加载 Photos 相册...",
+  "photosLibraryNotFound": "未找到 Photos 相册，请确保已安装并设置了 Photos 应用",
+  "linkPhotosLibraryFailed": "链接 Photos 相册失败: {error}",
+  "@linkPhotosLibraryFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }
 

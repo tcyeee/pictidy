@@ -52,6 +52,18 @@
   "create": "Create",
   "selectAlbum": "Select Album",
   "previousImage": "Previous Image",
-  "nextImage": "Next Image"
+  "nextImage": "Next Image",
+  "linkPhotosLibrary": "Link Photos Library",
+  "linkPhotosLibraryTooltip": "Link macOS Photos Library",
+  "loadingPhotosLibrary": "Loading Photos Library...",
+  "photosLibraryNotFound": "Photos Library not found. Please make sure Photos app is installed and set up",
+  "linkPhotosLibraryFailed": "Failed to link Photos Library: {error}",
+  "@linkPhotosLibraryFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }
 

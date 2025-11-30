@@ -107,6 +107,103 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _linkPhotosLibrary() async {
+    if (!mounted) return;
+    
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // 首先尝试默认路径
+      List<MediaItem> mediaItems = [];
+      String? selectedPath;
+      
+      try {
+        mediaItems = await MediaService.loadMediaFromPhotosLibrary();
+      } catch (e) {
+        debugPrint('默认路径失败: $e');
+        // 如果默认路径失败，让用户手动选择
+        if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
+          // 提示用户选择 Photos 库
+          final String? userSelectedPath = await FilePicker.platform.getDirectoryPath(
+            dialogTitle: l10n.linkPhotosLibrary,
+          );
+          
+          if (userSelectedPath == null) {
+            // 用户取消了选择
+            setState(() {
+              _isLoading = false;
+            });
+            return;
+          }
+          
+          selectedPath = userSelectedPath;
+          debugPrint('用户选择的路径: $selectedPath');
+          
+          // 使用用户选择的路径
+          try {
+            mediaItems = await MediaService.loadMediaFromPhotosLibrary(selectedPath);
+          } catch (e2) {
+            debugPrint('用户选择路径也失败: $e2');
+            throw e2;
+          }
+        }
+      }
+      
+      // 加载收藏状态和相册信息
+      for (var i = 0; i < mediaItems.length; i++) {
+        final item = mediaItems[i];
+        final isFav = await FavoriteService.isFavorite(item.path);
+        final albumName = await AlbumService.getAlbumForMedia(item.path);
+        if (isFav || albumName != null) {
+          mediaItems[i] = MediaItem(
+            file: item.file,
+            isVideo: item.isVideo,
+            isFavorite: isFav,
+            albumName: albumName,
+            dateModified: item.dateModified,
+          );
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _mediaItems = mediaItems;
+          _currentIndex = 0;
+          _isLoading = false;
+        });
+        
+        if (mediaItems.isEmpty) {
+          final l10n = AppLocalizations.of(context)!;
+          _showSnackBar(
+            selectedPath != null 
+              ? '${l10n.photosLibraryNotFound}\n路径: $selectedPath'
+              : l10n.photosLibraryNotFound,
+            Colors.orange,
+          );
+        } else {
+          final l10n = AppLocalizations.of(context)!;
+          _showSnackBar(
+            '成功加载 ${mediaItems.length} 个媒体文件',
+            Colors.green,
+          );
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('链接 Photos 库错误: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        final l10n = AppLocalizations.of(context)!;
+        _showSnackBar(l10n.linkPhotosLibraryFailed(e.toString()), Colors.red);
+      }
+    }
+  }
+
   Future<void> _deleteCurrent() async {
     if (_mediaItems.isEmpty || _currentIndex >= _mediaItems.length) return;
     if (!mounted) return;
@@ -356,6 +453,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
+            Builder(
+              builder: (context) {
+                final l10n = AppLocalizations.of(context)!;
+                return IconButton(
+                  icon: const Icon(Icons.photo_library),
+                  tooltip: l10n.linkPhotosLibraryTooltip,
+                  onPressed: _linkPhotosLibrary,
+                );
+              },
+            ),
           ],
         ),
         body: _isLoading
@@ -375,10 +482,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: const TextStyle(fontSize: 16, color: Colors.grey),
                             ),
                             const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: _selectDirectory,
-                              icon: const Icon(Icons.folder_open),
-                              label: Text(l10n.selectFolder),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: _selectDirectory,
+                                  icon: const Icon(Icons.folder_open),
+                                  label: Text(l10n.selectFolder),
+                                ),
+                                const SizedBox(width: 16),
+                                ElevatedButton.icon(
+                                  onPressed: _linkPhotosLibrary,
+                                  icon: const Icon(Icons.photo_library),
+                                  label: Text(l10n.linkPhotosLibrary),
+                                ),
+                              ],
                             ),
                           ],
                         );
