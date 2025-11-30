@@ -4,8 +4,10 @@
     "cocoapods",
     "csslib",
     "cupertino",
+    "pbxproj",
     "petitparser",
     "pictidy",
-    "Podfile"
+    "Podfile",
+    "xcodeproj"
   ]
 }

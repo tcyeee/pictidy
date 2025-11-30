@@ -1,62 +1,63 @@
 # PicTidy
 
-PicTidy 是一个简单高效的桌面端相册清理工具，帮助您整理和管理照片和视频。
+PicTidy is a simple and efficient desktop album cleanup tool that helps you organize and manage your photos and videos.
 
-## 功能特性
+## Features
 
-- 📸 **媒体浏览**: 逐个展示文件夹中的照片和视频
-- 🗑️ **删除功能**: 快速删除不需要的媒体文件
-- ⭐ **收藏管理**: 标记喜爱的照片和视频
-- 📁 **相册管理**: 将媒体文件组织到不同的相册中
-- ⌨️ **快捷键支持**: 所有操作都支持键盘快捷键，提高效率
-- 💡 **操作提示**: 清晰的快捷键提示和操作反馈
+- 📸 **Media Browsing**: Display photos and videos from folders one by one
+- 🗑️ **Delete Functionality**: Quickly delete unwanted media files
+- ⭐ **Favorite Management**: Mark your favorite photos and videos
+- 📁 **Album Management**: Organize media files into different albums
+- ⌨️ **Keyboard Shortcuts**: All operations support keyboard shortcuts for improved efficiency
+- 💡 **Operation Hints**: Clear keyboard shortcut hints and operation feedback
 
-## 快捷键
+## Keyboard Shortcuts
 
-- `←` 或 `A`: 上一张
-- `→` 或 `D`: 下一张
-- `Delete` 或 `Backspace`: 删除当前媒体
-- `F`: 切换收藏状态
-- `S`: 添加到相册
+- `←` or `A`: Previous
+- `→` or `D`: Next
+- `Delete` or `Backspace`: Delete current media
+- `F`: Toggle favorite status
+- `S`: Add to album
 
-## 使用方法
+## Usage
 
-1. 启动应用后，点击"选择文件夹"按钮或使用菜单选择包含照片/视频的文件夹
-2. 应用会自动扫描并加载所有媒体文件
-3. 使用快捷键或按钮进行以下操作：
-   - 浏览照片/视频（左右箭头或A/D键）
-   - 删除不需要的文件（Delete键）
-   - 收藏喜欢的媒体（F键）
-   - 添加到相册（S键）
+1. After launching the application, click the "Select Folder" button or use the menu to select a folder containing photos/videos
+2. The app will automatically scan and load all media files
+3. Use keyboard shortcuts or buttons to perform the following operations:
+   - Browse photos/videos (left/right arrows or A/D keys)
+   - Delete unwanted files (Delete key)
+   - Favorite liked media (F key)
+   - Add to album (S key)
 
-## 系统要求
+## System Requirements
 
 - Flutter SDK >= 3.0.0
-- 支持 macOS、Windows、Linux 桌面平台
+- Supports macOS, Windows, and Linux desktop platforms
 
-## 安装和运行
+## Installation and Running
 
 ```bash
-# 安装依赖
+# Install dependencies
 flutter pub get
 
-# 运行应用（macOS）
+# Run application (macOS)
 flutter run -d macos
 
-# 运行应用（Windows）
+# Run application (Windows)
 flutter run -d windows
 
-# 运行应用（Linux）
+# Run application (Linux)
 flutter run -d linux
 ```
 
-## 技术栈
+## Tech Stack
 
-- Flutter - 跨平台UI框架
-- file_picker - 文件夹选择
-- video_player - 视频播放
-- shared_preferences - 数据持久化
+- Flutter - Cross-platform UI framework
+- file_picker - Folder selection
+- video_player - Video playback
+- shared_preferences - Data persistence
 
-## 许可证
+## License
 
-详见 LICENSE 文件
+See LICENSE file for details
+

@@ -7,6 +7,7 @@ import 'package:pictidy/services/favorite_service.dart';
 import 'package:pictidy/services/album_service.dart';
 import 'package:pictidy/widgets/media_viewer.dart';
 import 'package:pictidy/widgets/shortcut_hint.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 // Intent classes for shortcuts
 class _NextMediaIntent extends Intent {
@@ -30,7 +31,9 @@ class _AddToAlbumIntent extends Intent {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Function(Locale)? onLocaleChanged;
+  
+  const HomeScreen({super.key, this.onLocaleChanged});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -85,7 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _isLoading = false;
         });
-        _showSnackBar('选择文件夹失败: $e', Colors.red);
+        final l10n = AppLocalizations.of(context)!;
+        _showSnackBar(l10n.selectFolderFailed(e.toString()), Colors.red);
       }
     }
   }
@@ -95,20 +99,21 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     final item = _mediaItems[_currentIndex];
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除 "${item.name}" 吗？此操作无法撤销。'),
+        title: Text(l10n.confirmDelete),
+        content: Text(l10n.confirmDeleteMessage(item.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -124,9 +129,11 @@ class _HomeScreenState extends State<HomeScreen> {
               _currentIndex--;
             }
           });
-          _showSnackBar('已删除: ${item.name}', Colors.green);
+          final l10n = AppLocalizations.of(context)!;
+          _showSnackBar('${l10n.deleted}: ${item.name}', Colors.green);
         } else {
-          _showSnackBar('删除失败', Colors.red);
+          final l10n = AppLocalizations.of(context)!;
+          _showSnackBar(l10n.deleteFailed, Colors.red);
         }
       }
     }
@@ -150,8 +157,9 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       });
       
+      final l10n = AppLocalizations.of(context)!;
       _showSnackBar(
-        isFav ? '已添加到收藏' : '已取消收藏',
+        isFav ? l10n.addedToFavorites : l10n.removedFromFavorites,
         isFav ? Colors.amber : Colors.grey,
       );
     }
@@ -187,7 +195,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 dateModified: item.dateModified,
               );
             });
-            _showSnackBar('已添加到相册: $newAlbumName', Colors.blue);
+            final l10n = AppLocalizations.of(context)!;
+            _showSnackBar(l10n.addedToAlbum(newAlbumName), Colors.blue);
           }
         }
       } else {
@@ -202,7 +211,8 @@ class _HomeScreenState extends State<HomeScreen> {
               dateModified: item.dateModified,
             );
           });
-          _showSnackBar('已添加到相册: $selectedAlbum', Colors.blue);
+          final l10n = AppLocalizations.of(context)!;
+          _showSnackBar(l10n.addedToAlbum(selectedAlbum), Colors.blue);
         }
       }
     }
@@ -211,26 +221,27 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<String?> _showCreateAlbumDialog() async {
     if (!mounted) return null;
     final controller = TextEditingController();
+    final l10n = AppLocalizations.of(context)!;
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('创建新相册'),
+        title: Text(l10n.createNewAlbum),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            labelText: '相册名称',
-            hintText: '输入相册名称',
+          decoration: InputDecoration(
+            labelText: l10n.albumName,
+            hintText: l10n.enterAlbumName,
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('创建'),
+            child: Text(l10n.create),
           ),
         ],
       ),
@@ -298,12 +309,39 @@ class _HomeScreenState extends State<HomeScreen> {
           autofocus: true,
           child: Scaffold(
         appBar: AppBar(
-          title: const Text('PicTidy - 相册清理工具'),
+          title: Builder(
+            builder: (context) {
+              final l10n = AppLocalizations.of(context)!;
+              return Text(l10n.appTitle);
+            },
+          ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.folder_open),
-              tooltip: '选择文件夹 (O)',
-              onPressed: _selectDirectory,
+            PopupMenuButton<Locale>(
+              icon: const Icon(Icons.language),
+              tooltip: 'Language / 语言',
+              onSelected: (locale) {
+                widget.onLocaleChanged?.call(locale);
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: Locale('zh'),
+                  child: Text('中文'),
+                ),
+                const PopupMenuItem(
+                  value: Locale('en'),
+                  child: Text('English'),
+                ),
+              ],
+            ),
+            Builder(
+              builder: (context) {
+                final l10n = AppLocalizations.of(context)!;
+                return IconButton(
+                  icon: const Icon(Icons.folder_open),
+                  tooltip: l10n.selectFolderTooltip,
+                  onPressed: _selectDirectory,
+                );
+              },
             ),
           ],
         ),
@@ -311,22 +349,27 @@ class _HomeScreenState extends State<HomeScreen> {
             ? const Center(child: CircularProgressIndicator())
             : _mediaItems.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.photo_library, size: 64, color: Colors.grey),
-                        const SizedBox(height: 16),
-                        const Text(
-                          '请选择一个包含照片或视频的文件夹',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: _selectDirectory,
-                          icon: const Icon(Icons.folder_open),
-                          label: const Text('选择文件夹'),
-                        ),
-                      ],
+                    child: Builder(
+                      builder: (context) {
+                        final l10n = AppLocalizations.of(context)!;
+                        return Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.photo_library, size: 64, color: Colors.grey),
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.pleaseSelectFolder,
+                              style: const TextStyle(fontSize: 16, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              onPressed: _selectDirectory,
+                              icon: const Icon(Icons.folder_open),
+                              label: Text(l10n.selectFolder),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   )
                 : Row(
@@ -412,139 +455,159 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             // 快捷键提示
-                            Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      '快捷键',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                            Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context)!;
+                                return Card(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          l10n.shortcuts,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        ShortcutHint(action: l10n.previousImage, shortcut: '← / A'),
+                                        const SizedBox(height: 4),
+                                        ShortcutHint(action: l10n.nextImage, shortcut: '→ / D'),
+                                        const SizedBox(height: 4),
+                                        ShortcutHint(action: l10n.delete, shortcut: 'Delete'),
+                                        const SizedBox(height: 4),
+                                        ShortcutHint(action: l10n.favorite, shortcut: 'F'),
+                                        const SizedBox(height: 4),
+                                        ShortcutHint(action: l10n.addToAlbum, shortcut: 'S'),
+                                      ],
                                     ),
-                                    const SizedBox(height: 8),
-                                    ShortcutHint(action: '上一张', shortcut: '← / A'),
-                                    const SizedBox(height: 4),
-                                    ShortcutHint(action: '下一张', shortcut: '→ / D'),
-                                    const SizedBox(height: 4),
-                                    ShortcutHint(action: '删除', shortcut: 'Delete'),
-                                    const SizedBox(height: 4),
-                                    ShortcutHint(action: '收藏', shortcut: 'F'),
-                                    const SizedBox(height: 4),
-                                    ShortcutHint(action: '添加到相册', shortcut: 'S'),
-                                  ],
-                                ),
-                              ),
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(height: 16),
                             // 操作按钮
-                            ElevatedButton.icon(
-                              onPressed: _navigateToPrevious,
-                              icon: const Icon(Icons.chevron_left),
-                              label: const Text('上一张'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.all(16),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              onPressed: _navigateToNext,
-                              icon: const Icon(Icons.chevron_right),
-                              label: const Text('下一张'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.all(16),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: _deleteCurrent,
-                              icon: const Icon(Icons.delete),
-                              label: const Text('删除'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.all(16),
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              onPressed: _toggleFavorite,
-                              icon: Icon(
-                                _currentIndex < _mediaItems.length &&
-                                        _mediaItems[_currentIndex].isFavorite
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                              ),
-                              label: Text(
-                                _currentIndex < _mediaItems.length &&
-                                        _mediaItems[_currentIndex].isFavorite
-                                    ? '取消收藏'
-                                    : '添加到收藏',
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.all(16),
-                                backgroundColor: _currentIndex < _mediaItems.length &&
-                                        _mediaItems[_currentIndex].isFavorite
-                                    ? Colors.amber
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              onPressed: _addToAlbum,
-                              icon: const Icon(Icons.album),
-                              label: const Text('添加到相册'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.all(16),
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final l10n = AppLocalizations.of(context)!;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: _navigateToPrevious,
+                                      icon: const Icon(Icons.chevron_left),
+                                      label: Text(l10n.previousImage),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.all(16),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ElevatedButton.icon(
+                                      onPressed: _navigateToNext,
+                                      icon: const Icon(Icons.chevron_right),
+                                      label: Text(l10n.nextImage),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.all(16),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      onPressed: _deleteCurrent,
+                                      icon: const Icon(Icons.delete),
+                                      label: Text(l10n.delete),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.all(16),
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ElevatedButton.icon(
+                                      onPressed: _toggleFavorite,
+                                      icon: Icon(
+                                        _currentIndex < _mediaItems.length &&
+                                                _mediaItems[_currentIndex].isFavorite
+                                            ? Icons.favorite
+                                            : Icons.favorite_border,
+                                      ),
+                                      label: Text(
+                                        _currentIndex < _mediaItems.length &&
+                                                _mediaItems[_currentIndex].isFavorite
+                                            ? l10n.removeFromFavorites
+                                            : l10n.addToFavorites,
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.all(16),
+                                        backgroundColor: _currentIndex < _mediaItems.length &&
+                                                _mediaItems[_currentIndex].isFavorite
+                                            ? Colors.amber
+                                            : null,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ElevatedButton.icon(
+                                      onPressed: _addToAlbum,
+                                      icon: const Icon(Icons.album),
+                                      label: Text(l10n.addToAlbum),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.all(16),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             const Spacer(),
                             // 当前状态
                             if (_currentIndex < _mediaItems.length)
-                              Card(
-                                color: Colors.blue.shade50,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        '当前状态',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      if (_mediaItems[_currentIndex].isFavorite)
-                                        const Row(
-                                          children: [
-                                            Icon(Icons.favorite, size: 16, color: Colors.amber),
-                                            SizedBox(width: 4),
-                                            Text('已收藏'),
-                                          ],
-                                        ),
-                                      if (_mediaItems[_currentIndex].albumName != null) ...[
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.album, size: 16, color: Colors.blue),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                '相册: ${_mediaItems[_currentIndex].albumName}',
-                                                style: const TextStyle(fontSize: 12),
-                                              ),
+                              Builder(
+                                builder: (context) {
+                                  final l10n = AppLocalizations.of(context)!;
+                                  return Card(
+                                    color: Colors.blue.shade50,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            l10n.currentStatus,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          if (_mediaItems[_currentIndex].isFavorite)
+                                            Row(
+                                              children: [
+                                                const Icon(Icons.favorite, size: 16, color: Colors.amber),
+                                                const SizedBox(width: 4),
+                                                Text(l10n.favorited),
+                                              ],
+                                            ),
+                                          if (_mediaItems[_currentIndex].albumName != null) ...[
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                const Icon(Icons.album, size: 16, color: Colors.blue),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    '${l10n.album}: ${_mediaItems[_currentIndex].albumName}',
+                                                    style: const TextStyle(fontSize: 12),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ],
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                           ],
                         ),
@@ -565,8 +628,9 @@ class _AlbumDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('选择相册'),
+      title: Text(l10n.selectAlbum),
       content: SizedBox(
         width: 300,
         child: ListView.builder(
@@ -576,7 +640,7 @@ class _AlbumDialog extends StatelessWidget {
             if (index == 0) {
               return ListTile(
                 leading: const Icon(Icons.add),
-                title: const Text('创建新相册'),
+                title: Text(l10n.createNewAlbum),
                 onTap: () => Navigator.pop(context, '_new_'),
               );
             }
@@ -592,7 +656,7 @@ class _AlbumDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
       ],
     );

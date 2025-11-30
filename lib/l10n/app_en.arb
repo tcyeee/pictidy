@@ -1,0 +1,57 @@
+{
+  "@@locale": "en",
+  "appTitle": "PicTidy - Photo Cleanup Tool",
+  "appTitleDescription": "PicTidy - Photo Cleanup Tool",
+  "selectFolder": "Select Folder",
+  "selectFolderTooltip": "Select Folder (O)",
+  "pleaseSelectFolder": "Please select a folder containing photos or videos",
+  "shortcuts": "Shortcuts",
+  "previous": "Previous",
+  "next": "Next",
+  "delete": "Delete",
+  "favorite": "Favorite",
+  "addToFavorites": "Add to Favorites",
+  "removeFromFavorites": "Remove from Favorites",
+  "addToAlbum": "Add to Album",
+  "currentStatus": "Current Status",
+  "favorited": "Favorited",
+  "album": "Album",
+  "confirmDelete": "Confirm Delete",
+  "confirmDeleteMessage": "Are you sure you want to delete \"{fileName}\"? This action cannot be undone.",
+  "@confirmDeleteMessage": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "cancel": "Cancel",
+  "deleted": "Deleted",
+  "deleteFailed": "Delete Failed",
+  "selectFolderFailed": "Failed to select folder: {error}",
+  "@selectFolderFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "addedToFavorites": "Added to Favorites",
+  "removedFromFavorites": "Removed from Favorites",
+  "addedToAlbum": "Added to Album: {albumName}",
+  "@addedToAlbum": {
+    "placeholders": {
+      "albumName": {
+        "type": "String"
+      }
+    }
+  },
+  "createNewAlbum": "Create New Album",
+  "albumName": "Album Name",
+  "enterAlbumName": "Enter album name",
+  "create": "Create",
+  "selectAlbum": "Select Album",
+  "previousImage": "Previous Image",
+  "nextImage": "Next Image"
+}
+
