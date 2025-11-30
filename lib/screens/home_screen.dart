@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +9,7 @@ import 'package:pictidy/services/album_service.dart';
 import 'package:pictidy/widgets/media_viewer.dart';
 import 'package:pictidy/widgets/shortcut_hint.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:path/path.dart' as path;
 
 // Intent classes for shortcuts
 class _NextMediaIntent extends Intent {
@@ -115,23 +117,25 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = true;
       });
 
-      // 首先尝试默认路径
       List<MediaItem> mediaItems = [];
       String? selectedPath;
       
+      // 首先尝试默认路径
       try {
         mediaItems = await MediaService.loadMediaFromPhotosLibrary();
+        debugPrint('成功从默认路径加载 Photos 库');
       } catch (e) {
         debugPrint('默认路径失败: $e');
-        // 如果默认路径失败，让用户手动选择
+        // 如果默认路径失败，让用户手动选择 Photos Library 包
         if (mounted) {
           final l10n = AppLocalizations.of(context)!;
-          // 提示用户选择 Photos 库
-          final String? userSelectedPath = await FilePicker.platform.getDirectoryPath(
-            dialogTitle: l10n.linkPhotosLibrary,
+          // 在 macOS 上，.photoslibrary 是一个包目录
+          // 使用 getDirectoryPath 让用户选择包（在 Finder 中显示为单个项目）
+          final result = await FilePicker.platform.getDirectoryPath(
+            dialogTitle: '${l10n.linkPhotosLibrary}\n请选择 Photos Library.photoslibrary 包',
           );
           
-          if (userSelectedPath == null) {
+          if (result == null || result.isEmpty) {
             // 用户取消了选择
             setState(() {
               _isLoading = false;
@@ -139,8 +143,59 @@ class _HomeScreenState extends State<HomeScreen> {
             return;
           }
           
-          selectedPath = userSelectedPath;
-          debugPrint('用户选择的路径: $selectedPath');
+          // 检查选择的路径是否是 .photoslibrary 包
+          String? photosLibraryPath;
+          if (result.endsWith('.photoslibrary')) {
+            photosLibraryPath = result;
+            debugPrint('用户直接选择了 Photos Library 包: $photosLibraryPath');
+          } else {
+            // 如果选择的是目录，尝试查找其中的 .photoslibrary 包
+            final dir = Directory(result);
+            if (await dir.exists()) {
+              try {
+                final files = dir.listSync();
+                for (var file in files) {
+                  if (file.path.endsWith('.photoslibrary')) {
+                    photosLibraryPath = file.path;
+                    debugPrint('在目录中找到 Photos Library 包: $photosLibraryPath');
+                    break;
+                  }
+                }
+              } catch (e) {
+                debugPrint('无法列出目录内容: $e');
+              }
+            }
+            
+            // 如果还是没找到，尝试在 Pictures 目录中查找
+            if (photosLibraryPath == null) {
+              final homeDir = Platform.environment['HOME'];
+              if (homeDir != null) {
+                final defaultPath = path.join(homeDir, 'Pictures', 'Photos Library.photoslibrary');
+                final defaultDir = Directory(defaultPath);
+                if (await defaultDir.exists()) {
+                  photosLibraryPath = defaultPath;
+                  debugPrint('使用默认 Photos Library 路径: $photosLibraryPath');
+                }
+              }
+            }
+          }
+          
+          if (photosLibraryPath == null) {
+            setState(() {
+              _isLoading = false;
+            });
+            final l10n = AppLocalizations.of(context)!;
+            _showSnackBar(
+              '未找到 Photos Library 包。\n'
+              '提示：请在文件选择器中导航到包含 Photos Library.photoslibrary 的目录，然后选择该包。\n'
+              '通常位于：~/Pictures/Photos Library.photoslibrary',
+              Colors.orange,
+            );
+            return;
+          }
+          
+          selectedPath = photosLibraryPath;
+          debugPrint('最终使用的 Photos Library 路径: $selectedPath');
           
           // 使用用户选择的路径
           try {

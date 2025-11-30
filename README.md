@@ -1,4 +1,6 @@
-[中文](i18n/README.zh.md) | [English](README.md)
+[中文](i18n/README.zh.md) | English
+
+![](assets/banner.png)
 
 # PicTidy
 

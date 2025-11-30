@@ -74,17 +74,41 @@ class MediaService {
     try {
       String? targetPath = photosLibraryPath;
       
-      // 如果没有提供路径，尝试默认路径
+      // 如果没有提供路径，尝试多个可能的默认路径
       if (targetPath == null || targetPath.isEmpty) {
         final homeDir = Platform.environment['HOME'];
         if (homeDir == null) {
           throw Exception('无法获取用户主目录');
         }
-        targetPath = path.join(homeDir, 'Pictures', 'Photos Library.photoslibrary');
+        
+        // 尝试多个可能的 Photos Library 位置
+        final possibleDefaultPaths = [
+          path.join(homeDir, 'Pictures', 'Photos Library.photoslibrary'),
+          path.join(homeDir, 'Pictures', '照片图库.photoslibrary'), // 中文系统
+          path.join('/Users', 'Shared', 'Photos Library.photoslibrary'),
+        ];
+        
+        bool found = false;
+        for (final defaultPath in possibleDefaultPaths) {
+          final dir = Directory(defaultPath);
+          if (await dir.exists()) {
+            targetPath = defaultPath;
+            found = true;
+            debugPrint('找到默认 Photos 库: $targetPath');
+            break;
+          }
+        }
+        
+        if (!found) {
+          throw Exception('未找到默认 Photos 库。请手动选择 Photos Library 包。');
+        }
       }
 
-      // 处理 .photoslibrary 包路径
-      // 如果路径以 .photoslibrary 结尾，需要访问包内的内容
+      // 确保路径以 .photoslibrary 结尾
+      if (!targetPath.endsWith('.photoslibrary')) {
+        throw Exception('选择的路径不是有效的 Photos Library 包（必须以 .photoslibrary 结尾）');
+      }
+
       final photosLibraryDir = Directory(targetPath);
       
       if (!await photosLibraryDir.exists()) {
@@ -94,15 +118,17 @@ class MediaService {
       final List<MediaItem> mediaItems = [];
       
       // Photos 库的结构（.photoslibrary 是一个包）：
-      // - originals/ - 原始图片（新版本 Photos）
+      // 现代 macOS Photos Library 结构：
+      // - originals/ - 原始图片（新版本 Photos，可能包含符号链接）
       // - Masters/ - 主图片（旧版本 iPhoto）
       // - resources/ - 资源文件
-      // - private/var/folders/... - 可能包含实际文件（新版本）
+      // - private/var/folders/... - 可能包含实际文件（新版本，使用符号链接）
       
       final possiblePaths = [
         path.join(targetPath, 'originals'),
         path.join(targetPath, 'Masters'),
         path.join(targetPath, 'resources', 'originals'),
+        path.join(targetPath, 'resources', 'masters'),
         path.join(targetPath, 'private', 'var'),
       ];
 
@@ -114,7 +140,13 @@ class MediaService {
           debugPrint('找到目录: $dirPath');
           try {
             final beforeCount = mediaItems.length;
-            await _loadMediaFromDirectoryRecursive(dir, mediaItems);
+            // 对于 Photos Library，允许跟随符号链接，但限制深度
+            await _loadMediaFromDirectoryRecursive(
+              dir, 
+              mediaItems,
+              followLinks: true,
+              maxDepth: 15,
+            );
             final afterCount = mediaItems.length;
             debugPrint('从 $dirPath 加载了 ${afterCount - beforeCount} 个媒体文件');
           } catch (e) {
@@ -127,11 +159,17 @@ class MediaService {
         }
       }
 
-      // 如果上述路径都没有找到，尝试直接搜索整个 Photos 库
+      // 如果上述路径都没有找到，尝试直接搜索整个 Photos 库（但跳过一些系统目录）
       if (mediaItems.isEmpty) {
-        debugPrint('尝试搜索整个 Photos 库...');
+        debugPrint('尝试搜索整个 Photos 库（跳过系统目录）...');
         try {
-          await _loadMediaFromDirectoryRecursive(photosLibraryDir, mediaItems);
+          await _loadMediaFromDirectoryRecursive(
+            photosLibraryDir, 
+            mediaItems,
+            followLinks: true,
+            maxDepth: 8,
+            skipDirs: ['database', 'thumbnails', 'cache', 'tmp'],
+          );
           debugPrint('从整个库中加载了 ${mediaItems.length} 个媒体文件');
         } catch (e) {
           debugPrint('搜索整个库失败: $e');
@@ -139,6 +177,14 @@ class MediaService {
       }
 
       debugPrint('总共找到 ${mediaItems.length} 个媒体文件');
+
+      if (mediaItems.isEmpty) {
+        throw Exception('在 Photos Library 中未找到任何媒体文件。这可能是因为：\n'
+            '1. Photos Library 为空\n'
+            '2. 应用没有足够的权限访问 Photos Library 内容\n'
+            '3. Photos Library 使用了加密或受保护的文件格式\n\n'
+            '建议：请确保在系统设置中授予应用访问照片的权限。');
+      }
 
       // 按修改时间排序，最新的在前
       mediaItems.sort((a, b) {
@@ -160,28 +206,42 @@ class MediaService {
     List<MediaItem> mediaItems, {
     int maxDepth = 10,
     int currentDepth = 0,
+    bool followLinks = false,
+    List<String> skipDirs = const [],
   }) async {
     if (currentDepth >= maxDepth) {
       return; // 防止无限递归
     }
     
     try {
-      final files = directory.listSync(followLinks: false);
+      final files = directory.listSync(followLinks: followLinks);
       int foundInThisDir = 0;
       
       for (var file in files) {
         try {
+          // 跳过指定的目录
+          if (file is Directory) {
+            final dirName = path.basename(file.path).toLowerCase();
+            if (skipDirs.any((skip) => dirName.contains(skip.toLowerCase()))) {
+              continue;
+            }
+          }
+          
           if (file is File && isMediaFile(file.path)) {
             try {
               final stat = await file.stat();
-              mediaItems.add(MediaItem(
-                file: file,
-                isVideo: isVideoFile(file.path),
-                dateModified: stat.modified,
-              ));
-              foundInThisDir++;
+              // 检查文件是否可读
+              if (stat.type == FileSystemEntityType.file) {
+                mediaItems.add(MediaItem(
+                  file: file,
+                  isVideo: isVideoFile(file.path),
+                  dateModified: stat.modified,
+                ));
+                foundInThisDir++;
+              }
             } catch (e) {
               // 如果无法读取文件信息，跳过
+              debugPrint('无法读取文件 ${file.path}: $e');
               continue;
             }
           } else if (file is Directory) {
@@ -192,9 +252,12 @@ class MediaService {
                 mediaItems,
                 maxDepth: maxDepth,
                 currentDepth: currentDepth + 1,
+                followLinks: followLinks,
+                skipDirs: skipDirs,
               );
             } catch (e) {
               // 如果子目录访问失败，继续
+              debugPrint('无法访问子目录 ${file.path}: $e');
               continue;
             }
           }
