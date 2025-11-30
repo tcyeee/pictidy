@@ -1,3 +1,5 @@
+[中文](README.zh.md) | [English](../README.md)
+
 # PicTidy
 
 PicTidy 是一个简单高效的桌面端相册清理工具，帮助您整理和管理照片和视频。

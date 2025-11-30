@@ -1,3 +1,5 @@
+[中文](i18n/README.zh.md) | [English](README.md)
+
 # PicTidy
 
 PicTidy is a simple and efficient desktop album cleanup tool that helps you organize and manage your photos and videos.
