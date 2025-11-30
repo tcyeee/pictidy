@@ -50,40 +50,53 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _selectDirectory() async {
+    if (!mounted) return;
+    
     try {
+      setState(() {
+        _isLoading = true;
+      });
+      
       final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-      if (selectedDirectory != null && mounted) {
+      
+      if (!mounted) return;
+      
+      if (selectedDirectory == null) {
+        // 用户取消了选择
         setState(() {
-          _isLoading = true;
+          _isLoading = false;
         });
+        return;
+      }
 
-        final mediaItems = await MediaService.loadMediaFromDirectory(selectedDirectory);
-        
-        // 加载收藏状态和相册信息
-        for (var i = 0; i < mediaItems.length; i++) {
-          final item = mediaItems[i];
-          final isFav = await FavoriteService.isFavorite(item.path);
-          final albumName = await AlbumService.getAlbumForMedia(item.path);
-          if (isFav || albumName != null) {
-            mediaItems[i] = MediaItem(
-              file: item.file,
-              isVideo: item.isVideo,
-              isFavorite: isFav,
-              albumName: albumName,
-              dateModified: item.dateModified,
-            );
-          }
-        }
-
-        if (mounted) {
-          setState(() {
-            _mediaItems = mediaItems;
-            _currentIndex = 0;
-            _isLoading = false;
-          });
+      final mediaItems = await MediaService.loadMediaFromDirectory(selectedDirectory);
+      
+      // 加载收藏状态和相册信息
+      for (var i = 0; i < mediaItems.length; i++) {
+        final item = mediaItems[i];
+        final isFav = await FavoriteService.isFavorite(item.path);
+        final albumName = await AlbumService.getAlbumForMedia(item.path);
+        if (isFav || albumName != null) {
+          mediaItems[i] = MediaItem(
+            file: item.file,
+            isVideo: item.isVideo,
+            isFavorite: isFav,
+            albumName: albumName,
+            dateModified: item.dateModified,
+          );
         }
       }
-    } catch (e) {
+
+      if (mounted) {
+        setState(() {
+          _mediaItems = mediaItems;
+          _currentIndex = 0;
+          _isLoading = false;
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint('选择文件夹错误: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
       if (mounted) {
         setState(() {
           _isLoading = false;
