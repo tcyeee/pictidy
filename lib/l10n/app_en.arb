@@ -64,6 +64,25 @@
         "type": "String"
       }
     }
+  },
+  "selectMediaSource": "Select Photo Folder or Photos Library",
+  "selectMediaSourceTooltip": "Select Photo Folder or Photos Library",
+  "noMediaFilesFound": "No media files found",
+  "successfullyLoadedMedia": "Successfully loaded {count} media files",
+  "@successfullyLoadedMedia": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectMediaSourceFailed": "Failed to select media source: {error}",
+  "@selectMediaSourceFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }
 

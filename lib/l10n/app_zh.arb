@@ -64,6 +64,25 @@
         "type": "String"
       }
     }
+  },
+  "selectMediaSource": "选择图片文件夹或 Photos 库",
+  "selectMediaSourceTooltip": "选择图片文件夹或 Photos 库",
+  "noMediaFilesFound": "未找到媒体文件",
+  "successfullyLoadedMedia": "成功加载 {count} 个媒体文件",
+  "@successfullyLoadedMedia": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectMediaSourceFailed": "选择媒体源失败: {error}",
+  "@selectMediaSourceFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }
 

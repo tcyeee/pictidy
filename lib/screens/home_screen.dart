@@ -51,19 +51,38 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
   }
 
-  Future<void> _selectDirectory() async {
+  /// 统一的媒体源选择方法
+  /// 自动打开用户的Pictures文件夹，支持选择普通文件夹或Photos库
+  Future<void> _selectMediaSource() async {
     if (!mounted) return;
     
     try {
       setState(() {
         _isLoading = true;
       });
+
+      // 获取用户的Pictures文件夹路径作为默认打开位置
+      String? initialDirectory;
+      final homeDir = Platform.environment['HOME'];
+      if (homeDir != null) {
+        final picturesPath = path.join(homeDir, 'Pictures');
+        final picturesDir = Directory(picturesPath);
+        if (await picturesDir.exists()) {
+          initialDirectory = picturesPath;
+        }
+      }
+
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
       
-      final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      final String? selectedPath = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: l10n.selectMediaSource,
+        initialDirectory: initialDirectory,
+      );
       
       if (!mounted) return;
       
-      if (selectedDirectory == null) {
+      if (selectedPath == null) {
         // 用户取消了选择
         setState(() {
           _isLoading = false;
@@ -71,139 +90,46 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      final mediaItems = await MediaService.loadMediaFromDirectory(selectedDirectory);
-      
-      // 加载收藏状态和相册信息
-      for (var i = 0; i < mediaItems.length; i++) {
-        final item = mediaItems[i];
-        final isFav = await FavoriteService.isFavorite(item.path);
-        final albumName = await AlbumService.getAlbumForMedia(item.path);
-        if (isFav || albumName != null) {
-          mediaItems[i] = MediaItem(
-            file: item.file,
-            isVideo: item.isVideo,
-            isFavorite: isFav,
-            albumName: albumName,
-            dateModified: item.dateModified,
-          );
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _mediaItems = mediaItems;
-          _currentIndex = 0;
-          _isLoading = false;
-        });
-      }
-    } catch (e, stackTrace) {
-      debugPrint('选择文件夹错误: $e');
-      debugPrint('堆栈跟踪: $stackTrace');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        final l10n = AppLocalizations.of(context)!;
-        _showSnackBar(l10n.selectFolderFailed(e.toString()), Colors.red);
-      }
-    }
-  }
-
-  Future<void> _linkPhotosLibrary() async {
-    if (!mounted) return;
-    
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
       List<MediaItem> mediaItems = [];
-      String? selectedPath;
-      
-      // 首先尝试默认路径
-      try {
-        mediaItems = await MediaService.loadMediaFromPhotosLibrary();
-        debugPrint('成功从默认路径加载 Photos 库');
-      } catch (e) {
-        debugPrint('默认路径失败: $e');
-        // 如果默认路径失败，让用户手动选择 Photos Library 包
-        if (mounted) {
-          final l10n = AppLocalizations.of(context)!;
-          // 在 macOS 上，.photoslibrary 是一个包目录
-          // 使用 getDirectoryPath 让用户选择包（在 Finder 中显示为单个项目）
-          final result = await FilePicker.platform.getDirectoryPath(
-            dialogTitle: '${l10n.linkPhotosLibrary}\n请选择 Photos Library.photoslibrary 包',
-          );
-          
-          if (result == null || result.isEmpty) {
-            // 用户取消了选择
-            setState(() {
-              _isLoading = false;
-            });
-            return;
-          }
-          
-          // 检查选择的路径是否是 .photoslibrary 包
-          String? photosLibraryPath;
-          if (result.endsWith('.photoslibrary')) {
-            photosLibraryPath = result;
-            debugPrint('用户直接选择了 Photos Library 包: $photosLibraryPath');
-          } else {
-            // 如果选择的是目录，尝试查找其中的 .photoslibrary 包
-            final dir = Directory(result);
-            if (await dir.exists()) {
-              try {
-                final files = dir.listSync();
-                for (var file in files) {
-                  if (file.path.endsWith('.photoslibrary')) {
-                    photosLibraryPath = file.path;
-                    debugPrint('在目录中找到 Photos Library 包: $photosLibraryPath');
-                    break;
-                  }
-                }
-              } catch (e) {
-                debugPrint('无法列出目录内容: $e');
-              }
-            }
-            
-            // 如果还是没找到，尝试在 Pictures 目录中查找
-            if (photosLibraryPath == null) {
-              final homeDir = Platform.environment['HOME'];
-              if (homeDir != null) {
-                final defaultPath = path.join(homeDir, 'Pictures', 'Photos Library.photoslibrary');
-                final defaultDir = Directory(defaultPath);
-                if (await defaultDir.exists()) {
-                  photosLibraryPath = defaultPath;
-                  debugPrint('使用默认 Photos Library 路径: $photosLibraryPath');
-                }
-              }
-            }
-          }
-          
-          if (photosLibraryPath == null) {
-            setState(() {
-              _isLoading = false;
-            });
-            final l10n = AppLocalizations.of(context)!;
-            _showSnackBar(
-              '未找到 Photos Library 包。\n'
-              '提示：请在文件选择器中导航到包含 Photos Library.photoslibrary 的目录，然后选择该包。\n'
-              '通常位于：~/Pictures/Photos Library.photoslibrary',
-              Colors.orange,
-            );
-            return;
-          }
-          
-          selectedPath = photosLibraryPath;
-          debugPrint('最终使用的 Photos Library 路径: $selectedPath');
-          
-          // 使用用户选择的路径
+
+      // 检测选择的是Photos库还是普通文件夹
+      if (selectedPath.endsWith('.photoslibrary')) {
+        // 用户选择了Photos库
+        debugPrint('检测到Photos库: $selectedPath');
+        try {
+          mediaItems = await MediaService.loadMediaFromPhotosLibrary(selectedPath);
+        } catch (e) {
+          debugPrint('加载Photos库失败: $e');
+          rethrow;
+        }
+      } else {
+        // 检查选择的目录中是否包含.photoslibrary包
+        final dir = Directory(selectedPath);
+        if (await dir.exists()) {
           try {
-            mediaItems = await MediaService.loadMediaFromPhotosLibrary(selectedPath);
-          } catch (e2) {
-            debugPrint('用户选择路径也失败: $e2');
-            throw e2;
+            final files = dir.listSync();
+            for (var file in files) {
+              if (file.path.endsWith('.photoslibrary')) {
+                // 在目录中找到了Photos库
+                debugPrint('在目录中找到Photos库: ${file.path}');
+                try {
+                  mediaItems = await MediaService.loadMediaFromPhotosLibrary(file.path);
+                  break;
+                } catch (e) {
+                  debugPrint('加载找到的Photos库失败: $e');
+                  // 继续尝试作为普通文件夹加载
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('无法列出目录内容: $e');
           }
+        }
+
+        // 如果没有找到Photos库，或者加载失败，则作为普通文件夹处理
+        if (mediaItems.isEmpty) {
+          debugPrint('作为普通文件夹加载: $selectedPath');
+          mediaItems = await MediaService.loadMediaFromDirectory(selectedPath);
         }
       }
       
@@ -229,35 +155,33 @@ class _HomeScreenState extends State<HomeScreen> {
           _currentIndex = 0;
           _isLoading = false;
         });
-        
+
+        final l10nAfterLoad = AppLocalizations.of(context)!;
         if (mediaItems.isEmpty) {
-          final l10n = AppLocalizations.of(context)!;
           _showSnackBar(
-            selectedPath != null 
-              ? '${l10n.photosLibraryNotFound}\n路径: $selectedPath'
-              : l10n.photosLibraryNotFound,
+            l10nAfterLoad.noMediaFilesFound,
             Colors.orange,
           );
         } else {
-          final l10n = AppLocalizations.of(context)!;
           _showSnackBar(
-            '成功加载 ${mediaItems.length} 个媒体文件',
+            l10nAfterLoad.successfullyLoadedMedia(mediaItems.length),
             Colors.green,
           );
         }
       }
     } catch (e, stackTrace) {
-      debugPrint('链接 Photos 库错误: $e');
+      debugPrint('选择媒体源错误: $e');
       debugPrint('堆栈跟踪: $stackTrace');
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
-        final l10n = AppLocalizations.of(context)!;
-        _showSnackBar(l10n.linkPhotosLibraryFailed(e.toString()), Colors.red);
+        final l10nError = AppLocalizations.of(context)!;
+        _showSnackBar(l10nError.selectMediaSourceFailed(e.toString()), Colors.red);
       }
     }
   }
+
 
   Future<void> _deleteCurrent() async {
     if (_mediaItems.isEmpty || _currentIndex >= _mediaItems.length) return;
@@ -503,18 +427,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 final l10n = AppLocalizations.of(context)!;
                 return IconButton(
                   icon: const Icon(Icons.folder_open),
-                  tooltip: l10n.selectFolderTooltip,
-                  onPressed: _selectDirectory,
-                );
-              },
-            ),
-            Builder(
-              builder: (context) {
-                final l10n = AppLocalizations.of(context)!;
-                return IconButton(
-                  icon: const Icon(Icons.photo_library),
-                  tooltip: l10n.linkPhotosLibraryTooltip,
-                  onPressed: _linkPhotosLibrary,
+                  tooltip: l10n.selectMediaSourceTooltip,
+                  onPressed: _selectMediaSource,
                 );
               },
             ),
@@ -537,21 +451,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: const TextStyle(fontSize: 16, color: Colors.grey),
                             ),
                             const SizedBox(height: 24),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: _selectDirectory,
-                                  icon: const Icon(Icons.folder_open),
-                                  label: Text(l10n.selectFolder),
-                                ),
-                                const SizedBox(width: 16),
-                                ElevatedButton.icon(
-                                  onPressed: _linkPhotosLibrary,
-                                  icon: const Icon(Icons.photo_library),
-                                  label: Text(l10n.linkPhotosLibrary),
-                                ),
-                              ],
+                            ElevatedButton.icon(
+                              onPressed: _selectMediaSource,
+                              icon: const Icon(Icons.folder_open),
+                              label: Text(l10n.selectMediaSource),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              ),
                             ),
                           ],
                         );

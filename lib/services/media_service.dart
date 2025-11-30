@@ -104,8 +104,13 @@ class MediaService {
         }
       }
 
+      // 确保 targetPath 不为 null
+      if (targetPath == null) {
+        throw Exception('无法确定 Photos Library 路径');
+      }
+
       // 确保路径以 .photoslibrary 结尾
-      if (!targetPath?.endsWith('.photoslibrary')) {
+      if (!targetPath.endsWith('.photoslibrary')) {
         throw Exception('选择的路径不是有效的 Photos Library 包（必须以 .photoslibrary 结尾）');
       }
 

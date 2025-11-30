@@ -1,6 +1,8 @@
-[中文](i18n/README.zh.md) | English
-
 ![](assets/banner.png)
+
+
+<div align="center">English ｜ <a href="./i18n/README.zh.md">中文</a></div>
+
 
 # PicTidy
 

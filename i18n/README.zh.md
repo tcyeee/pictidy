@@ -1,6 +1,6 @@
-中文 | [English](../README.md)
-
 ![](assets/banner.png)
+
+<div align="center">中文 ｜ <a href="../README.md">English</a></div>
 
 # PicTidy
 
