@@ -83,6 +83,10 @@
         "type": "String"
       }
     }
-  }
+  },
+  "permissionRequired": "Photo Library Permission Required",
+  "permissionDeniedMessage": "Permission to access the photo library is required to load photos. Please grant permission in System Settings.",
+  "openSettings": "Open Settings",
+  "loadingPhotosLibrary": "Loading photo library..."
 }
 

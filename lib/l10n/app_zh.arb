@@ -65,7 +65,7 @@
       }
     }
   },
-  "selectMediaSource": "选择图片文件夹或 Photos 库",
+  "selectMediaSource": "选择图片文件夹或 Photos 库\n（可以直接选择 .photoslibrary 包，如 full.photoslibrary）",
   "selectMediaSourceTooltip": "选择图片文件夹或 Photos 库",
   "noMediaFilesFound": "未找到媒体文件",
   "successfullyLoadedMedia": "成功加载 {count} 个媒体文件",
@@ -83,6 +83,10 @@
         "type": "String"
       }
     }
-  }
+  },
+  "permissionRequired": "需要照片库权限",
+  "permissionDeniedMessage": "需要访问照片库的权限才能加载照片。请在系统设置中授予权限。",
+  "openSettings": "打开设置",
+  "loadingPhotosLibrary": "正在加载照片库..."
 }
 

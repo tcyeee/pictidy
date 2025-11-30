@@ -14,5 +14,9 @@
 	<true/>
 	<key>com.apple.security.files.pictures.read-write</key>
 	<true/>
+	<key>com.apple.security.assets.pictures.read-only</key>
+	<true/>
+	<key>com.apple.security.assets.pictures.read-write</key>
+	<true/>
 </dict>
 </plist>

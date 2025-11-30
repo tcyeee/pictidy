@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:pictidy/models/media_item.dart';
 import 'package:pictidy/services/media_service.dart';
 import 'package:pictidy/services/favorite_service.dart';
 import 'package:pictidy/services/album_service.dart';
+import 'package:pictidy/services/permission_service.dart';
 import 'package:pictidy/widgets/media_viewer.dart';
 import 'package:pictidy/widgets/shortcut_hint.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -49,135 +49,110 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // 应用启动时自动请求权限并加载第一张照片
+    // 延迟一下确保窗口已经显示，这在 macOS 26 上很重要
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _loadFirstPhoto();
+        }
+      });
+    });
   }
 
-  /// 统一的媒体源选择方法
-  /// 自动打开用户的Pictures文件夹，支持选择普通文件夹或Photos库
-  Future<void> _selectMediaSource() async {
+  /// 自动加载第一张照片
+  Future<void> _loadFirstPhoto() async {
     if (!mounted) return;
     
-    try {
-      setState(() {
-        _isLoading = true;
-      });
+    setState(() {
+      _isLoading = true;
+    });
 
-      // 获取用户的Pictures文件夹路径作为默认打开位置
-      String? initialDirectory;
-      final homeDir = Platform.environment['HOME'];
-      if (homeDir != null) {
-        final picturesPath = path.join(homeDir, 'Pictures');
-        final picturesDir = Directory(picturesPath);
-        if (await picturesDir.exists()) {
-          initialDirectory = picturesPath;
+    try {
+      // 直接获取第一张照片（系统会自动处理权限请求）
+      final photoInfo = await PermissionService.getFirstPhoto();
+      
+      if (photoInfo == null || !mounted) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+        });
+        if (!mounted) return;
+        final l10n = AppLocalizations.of(context)!;
+        if (mounted) {
+          _showSnackBar(
+            l10n.noMediaFilesFound,
+            Colors.orange,
+          );
         }
+        return;
       }
 
-      if (!mounted) return;
-      final l10n = AppLocalizations.of(context)!;
-      
-      final String? selectedPath = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: l10n.selectMediaSource,
-        initialDirectory: initialDirectory,
-      );
-      
-      if (!mounted) return;
-      
-      if (selectedPath == null) {
-        // 用户取消了选择
+      // 将照片信息转换为 MediaItem
+      final photoPath = photoInfo['path'] as String?;
+      if (photoPath == null) {
         setState(() {
           _isLoading = false;
         });
         return;
       }
 
-      List<MediaItem> mediaItems = [];
-
-      // 检测选择的是Photos库还是普通文件夹
-      if (selectedPath.endsWith('.photoslibrary')) {
-        // 用户选择了Photos库
-        debugPrint('检测到Photos库: $selectedPath');
-        try {
-          mediaItems = await MediaService.loadMediaFromPhotosLibrary(selectedPath);
-        } catch (e) {
-          debugPrint('加载Photos库失败: $e');
-          rethrow;
-        }
-      } else {
-        // 检查选择的目录中是否包含.photoslibrary包
-        final dir = Directory(selectedPath);
-        if (await dir.exists()) {
-          try {
-            final files = dir.listSync();
-            for (var file in files) {
-              if (file.path.endsWith('.photoslibrary')) {
-                // 在目录中找到了Photos库
-                debugPrint('在目录中找到Photos库: ${file.path}');
-                try {
-                  mediaItems = await MediaService.loadMediaFromPhotosLibrary(file.path);
-                  break;
-                } catch (e) {
-                  debugPrint('加载找到的Photos库失败: $e');
-                  // 继续尝试作为普通文件夹加载
-                }
-              }
-            }
-          } catch (e) {
-            debugPrint('无法列出目录内容: $e');
-          }
-        }
-
-        // 如果没有找到Photos库，或者加载失败，则作为普通文件夹处理
-        if (mediaItems.isEmpty) {
-          debugPrint('作为普通文件夹加载: $selectedPath');
-          mediaItems = await MediaService.loadMediaFromDirectory(selectedPath);
-        }
+      final photoFile = File(photoPath);
+      if (!await photoFile.exists()) {
+        setState(() {
+          _isLoading = false;
+        });
+        return;
       }
-      
+
+      final creationDate = photoInfo['creationDate'] as double?;
+      final dateModified = creationDate != null 
+          ? DateTime.fromMillisecondsSinceEpoch((creationDate * 1000).toInt())
+          : await photoFile.lastModified();
+
+      final mediaItem = MediaItem(
+        file: photoFile,
+        isVideo: false,
+        dateModified: dateModified,
+      );
+
       // 加载收藏状态和相册信息
-      for (var i = 0; i < mediaItems.length; i++) {
-        final item = mediaItems[i];
-        final isFav = await FavoriteService.isFavorite(item.path);
-        final albumName = await AlbumService.getAlbumForMedia(item.path);
-        if (isFav || albumName != null) {
-          mediaItems[i] = MediaItem(
-            file: item.file,
-            isVideo: item.isVideo,
-            isFavorite: isFav,
-            albumName: albumName,
-            dateModified: item.dateModified,
-          );
-        }
-      }
+      final isFav = await FavoriteService.isFavorite(mediaItem.path);
+      final albumName = await AlbumService.getAlbumForMedia(mediaItem.path);
+      
+      final finalMediaItem = MediaItem(
+        file: mediaItem.file,
+        isVideo: mediaItem.isVideo,
+        isFavorite: isFav,
+        albumName: albumName,
+        dateModified: mediaItem.dateModified,
+      );
 
       if (mounted) {
         setState(() {
-          _mediaItems = mediaItems;
+          _mediaItems = [finalMediaItem];
           _currentIndex = 0;
           _isLoading = false;
         });
 
-        final l10nAfterLoad = AppLocalizations.of(context)!;
-        if (mediaItems.isEmpty) {
-          _showSnackBar(
-            l10nAfterLoad.noMediaFilesFound,
-            Colors.orange,
-          );
-        } else {
-          _showSnackBar(
-            l10nAfterLoad.successfullyLoadedMedia(mediaItems.length),
-            Colors.green,
-          );
-        }
+        final l10n = AppLocalizations.of(context)!;
+        _showSnackBar(
+          l10n.successfullyLoadedMedia(1),
+          Colors.green,
+        );
       }
     } catch (e, stackTrace) {
-      debugPrint('选择媒体源错误: $e');
+      debugPrint('加载第一张照片错误: $e');
       debugPrint('堆栈跟踪: $stackTrace');
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
-        final l10nError = AppLocalizations.of(context)!;
-        _showSnackBar(l10nError.selectMediaSourceFailed(e.toString()), Colors.red);
+        final l10n = AppLocalizations.of(context)!;
+        _showSnackBar(
+          l10n.selectMediaSourceFailed(e.toString()),
+          Colors.red,
+        );
       }
     }
   }
@@ -422,16 +397,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            Builder(
-              builder: (context) {
-                final l10n = AppLocalizations.of(context)!;
-                return IconButton(
-                  icon: const Icon(Icons.folder_open),
-                  tooltip: l10n.selectMediaSourceTooltip,
-                  onPressed: _selectMediaSource,
-                );
-              },
-            ),
           ],
         ),
         body: _isLoading
@@ -447,17 +412,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             const Icon(Icons.photo_library, size: 64, color: Colors.grey),
                             const SizedBox(height: 16),
                             Text(
-                              l10n.pleaseSelectFolder,
+                              l10n.loadingPhotosLibrary,
                               style: const TextStyle(fontSize: 16, color: Colors.grey),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: _selectMediaSource,
-                              icon: const Icon(Icons.folder_open),
-                              label: Text(l10n.selectMediaSource),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                              ),
                             ),
                           ],
                         );
