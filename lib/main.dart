@@ -1,10 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'services/permission_service.dart';
 import 'services/photo_service.dart';
-import 'widgets/debug_info_card.dart';
-import 'widgets/action_buttons.dart';
-import 'widgets/photo_display_card.dart';
+import 'widgets/photo_preview.dart';
+import 'widgets/photo_thumbnail_grid.dart';
+import 'widgets/photo_info_panel.dart';
 
 /// 应用程序入口
 void main() {
@@ -50,9 +51,11 @@ class _MyHomePageState extends State<MyHomePage> {
   final PhotoService _photoService = PhotoService();
 
   // 状态变量
-  String? _firstImagePath;
-  Uint8List? _firstImageData;
+  String? _previewImagePath;
+  Uint8List? _previewImageData;
+  AssetEntity? _selectedAsset;
   bool _isLoading = false;
+  bool _isLoadingPreview = false;
   String _debugInfo = '正在初始化...';
 
   @override
@@ -226,8 +229,8 @@ class _MyHomePageState extends State<MyHomePage> {
           result.filePath != null ? '✅ 成功！文件路径: ${result.filePath}' : '✅ 成功！数据大小: ${result.imageData!.length} 字节',
         );
         setState(() {
-          _firstImagePath = result.filePath;
-          _firstImageData = result.imageData;
+          _previewImagePath = result.filePath;
+          _previewImageData = result.imageData;
           _isLoading = false;
         });
       } else {
@@ -247,6 +250,39 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  /// 处理照片选择
+  ///
+  /// 当用户点击缩略图时调用，加载选中照片的完整数据
+  Future<void> _onPhotoSelected(AssetEntity asset) async {
+    setState(() {
+      _selectedAsset = asset;
+      _isLoadingPreview = true;
+      _previewImagePath = null;
+      _previewImageData = null;
+    });
+
+    try {
+      final result = await _photoService.loadPhotoData(asset);
+      if (result.success && result.hasData) {
+        setState(() {
+          _previewImagePath = result.filePath;
+          _previewImageData = result.imageData;
+          _isLoadingPreview = false;
+        });
+      } else {
+        setState(() {
+          _isLoadingPreview = false;
+        });
+        _updateDebugInfo('加载照片失败: ${result.errorMessage}');
+      }
+    } catch (e) {
+      setState(() {
+        _isLoadingPreview = false;
+      });
+      _updateDebugInfo('加载照片时出错: $e');
+    }
+  }
+
   /// 更新调试信息
   ///
   /// 同时更新状态和打印日志
@@ -260,31 +296,105 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(backgroundColor: Theme.of(context).colorScheme.inversePrimary, title: const Text('Pic Tidy')),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 调试信息卡片
-              DebugInfoCard(debugInfo: _debugInfo),
-              const SizedBox(height: 20),
-              // 操作按钮组
-              ActionButtons(
-                isLoading: _isLoading,
-                onRequestPermission: _requestPermission,
-                onCheckPermission: _checkPermissionStatus,
-                onOpenSettings: _openSystemSettings,
-              ),
-              // 加载指示器
-              if (_isLoading) ...[const SizedBox(height: 20), const Center(child: CircularProgressIndicator())],
-              const SizedBox(height: 20),
-              // 照片显示卡片
-              PhotoDisplayCard(imagePath: _firstImagePath, imageData: _firstImageData),
-            ],
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('Pic Tidy'),
+        actions: [
+          // 权限相关按钮移到AppBar
+          IconButton(
+            icon: const Icon(Icons.lock_open),
+            tooltip: '请求权限',
+            onPressed: _isLoading ? null : _requestPermission,
           ),
-        ),
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: '检查权限',
+            onPressed: _isLoading ? null : _checkPermissionStatus,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '系统设置',
+            onPressed: _isLoading ? null : _openSystemSettings,
+          ),
+        ],
+      ),
+      body: Row(
+        children: [
+          // 左侧面板
+          Container(
+            width: 400,
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              border: Border(right: BorderSide(color: Colors.grey[300]!)),
+            ),
+            child: Column(
+              children: [
+                // 上半部分：照片缩略图网格
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Text('照片缩略图', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                        Expanded(child: PhotoThumbnailGrid(onPhotoSelected: _onPhotoSelected)),
+                      ],
+                    ),
+                  ),
+                ),
+                // 分隔线
+                const Divider(height: 1),
+                // 下半部分：照片信息面板
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Text('照片信息', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                        Expanded(child: PhotoInfoPanel(asset: _selectedAsset)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 右侧主区域：照片预览
+          Expanded(
+            child: PhotoPreview(
+              imagePath: _previewImagePath,
+              imageData: _previewImageData,
+              isLoading: _isLoadingPreview,
+            ),
+          ),
+        ],
+      ),
+      // 底部调试信息（可选，可以通过浮动按钮或抽屉显示）
+      floatingActionButton: FloatingActionButton(
+        mini: true,
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  title: const Text('调试信息'),
+                  content: SingleChildScrollView(
+                    child: Text(_debugInfo, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                  ),
+                  actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('关闭'))],
+                ),
+          );
+        },
+        child: const Icon(Icons.bug_report),
       ),
     );
   }
