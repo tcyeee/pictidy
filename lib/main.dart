@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'services/permission_service.dart';
+import 'pages/banner_page.dart';
 import 'services/photo_service.dart';
 import 'widgets/photo_preview.dart';
 import 'widgets/photo_thumbnail_grid.dart';
@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Pic Tidy',
       theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple), useMaterial3: true),
-      home: const MyHomePage(),
+      home: const BannerPage(), // 启动页作为首页
     );
   }
 }
@@ -47,208 +47,35 @@ class MyHomePage extends StatefulWidget {
 /// - 调试信息
 class _MyHomePageState extends State<MyHomePage> {
   // 服务实例
-  final PermissionService _permissionService = PermissionService();
   final PhotoService _photoService = PhotoService();
 
   // 状态变量
   String? _previewImagePath;
   Uint8List? _previewImageData;
   AssetEntity? _selectedAsset;
-  bool _isLoading = false;
   bool _isLoadingPreview = false;
-  String _debugInfo = '正在初始化...';
+  String _debugInfo = '已进入主界面';
 
   @override
   void initState() {
     super.initState();
-    // 启动时自动检查权限并加载照片
+    // 页面加载后自动加载照片缩略图
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndLoadPhoto();
+      _loadPhotos();
     });
   }
 
-  /// 检查权限并加载照片
+  /// 加载照片
   ///
-  /// 启动时自动调用，先检查权限状态，如果有权限则加载照片
-  /// 在 macOS 上，即使权限检查显示未授权，也可能实际已授权，所以会尝试直接加载
-  Future<void> _checkAndLoadPhoto() async {
+  /// 页面加载后自动调用，加载最近的20张照片
+  Future<void> _loadPhotos() async {
+    // 照片缩略图会在 PhotoThumbnailGrid 组件中自动加载
+    // 这里可以做一些初始化工作
     setState(() {
-      _isLoading = true;
-      _debugInfo = '正在检查权限状态...';
+      _debugInfo = '已进入主界面';
     });
-
-    try {
-      // 检查当前权限状态
-      final state = await _permissionService.checkPermissionStatus();
-      final statusText = _permissionService.formatPermissionStatus(state);
-      _updateDebugInfo('权限状态: $statusText');
-
-      // 判断是否有权限
-      if (_permissionService.hasPermission(state)) {
-        // 权限状态显示已授予，直接加载照片
-        _updateDebugInfo('权限状态显示已授予，正在加载照片...');
-        await _loadFirstPhoto();
-      } else {
-        // 尝试直接加载照片，因为 macOS 的权限检查可能不准确
-        _updateDebugInfo('权限状态显示未授予，但尝试直接访问照片...');
-        try {
-          await _loadFirstPhoto();
-        } catch (e) {
-          // 如果访问失败，说明真的没有权限
-          setState(() {
-            _isLoading = false;
-            _debugInfo = '无法访问照片\n请点击"请求权限"按钮';
-          });
-        }
-      }
-    } catch (e) {
-      // 如果权限检查失败，也尝试直接加载照片
-      _updateDebugInfo('权限检查失败，尝试直接访问照片...');
-      try {
-        await _loadFirstPhoto();
-      } catch (loadError) {
-        setState(() {
-          _isLoading = false;
-          _debugInfo = '检查权限失败: $e\n访问照片也失败: $loadError';
-        });
-        debugPrint('检查权限错误: $e');
-        debugPrint('访问照片错误: $loadError');
-      }
-    }
   }
 
-  /// 检查权限状态
-  ///
-  /// 手动检查当前权限状态，并显示详细信息
-  Future<void> _checkPermissionStatus() async {
-    setState(() {
-      _isLoading = true;
-      _debugInfo = '正在检查权限状态...';
-    });
-
-    try {
-      final state = await _permissionService.checkPermissionStatus();
-      final statusText = _permissionService.formatPermissionStatus(state);
-
-      setState(() {
-        _isLoading = false;
-        _debugInfo = statusText;
-      });
-
-      debugPrint('权限状态检查:');
-      debugPrint('  完整状态: $state');
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _debugInfo = '检查权限状态失败: $e';
-      });
-      debugPrint('检查权限状态错误: $e');
-    }
-  }
-
-  /// 请求照片访问权限
-  ///
-  /// 弹出系统权限对话框，请求用户授权
-  /// 如果授权成功，会自动加载照片
-  Future<void> _requestPermission() async {
-    setState(() {
-      _isLoading = true;
-      _debugInfo = '正在请求权限...\n请在弹出的对话框中点击"好"或"允许"';
-    });
-
-    try {
-      final state = await _permissionService.requestPermission();
-      final statusText = _permissionService.formatPermissionStatus(state);
-
-      debugPrint('权限请求结果:');
-      debugPrint('  完整状态: $state');
-
-      if (_permissionService.hasPermission(state)) {
-        setState(() {
-          _isLoading = false;
-          _debugInfo = '✅ 权限已授予！\n$statusText';
-        });
-        // 权限已授予，加载照片
-        await _loadFirstPhoto();
-      } else {
-        setState(() {
-          _isLoading = false;
-          _debugInfo =
-              '❌ 权限被拒绝\n$statusText\n\n'
-              '请点击"打开系统设置"按钮手动授权';
-        });
-      }
-    } catch (e, stackTrace) {
-      setState(() {
-        _isLoading = false;
-        _debugInfo = '❌ 请求权限时出错: $e';
-      });
-      debugPrint('请求权限错误: $e');
-      debugPrint('堆栈: $stackTrace');
-    }
-  }
-
-  /// 打开系统设置页面
-  ///
-  /// 引导用户到系统设置中手动授权照片访问权限
-  Future<void> _openSystemSettings() async {
-    try {
-      await _permissionService.openSystemSettings();
-      setState(() {
-        _debugInfo =
-            '已打开系统设置\n'
-            '请在"隐私与安全性" > "照片"中找到应用并授权\n'
-            '授权后点击"检查权限状态"按钮';
-      });
-    } catch (e) {
-      setState(() {
-        _debugInfo =
-            '无法打开系统设置: $e\n'
-            '请手动打开: 系统设置 > 隐私与安全性 > 照片';
-      });
-      debugPrint('打开系统设置失败: $e');
-    }
-  }
-
-  /// 加载第一张照片
-  ///
-  /// 从相册中加载第一张照片，并更新UI显示
-  Future<void> _loadFirstPhoto() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _debugInfo = '正在获取相册列表...';
-      });
-
-      // 使用照片服务加载照片
-      final result = await _photoService.loadFirstPhoto();
-
-      if (result.success && result.hasData) {
-        // 加载成功
-        _updateDebugInfo(
-          result.filePath != null ? '✅ 成功！文件路径: ${result.filePath}' : '✅ 成功！数据大小: ${result.imageData!.length} 字节',
-        );
-        setState(() {
-          _previewImagePath = result.filePath;
-          _previewImageData = result.imageData;
-          _isLoading = false;
-        });
-      } else {
-        // 加载失败
-        _updateDebugInfo(result.errorMessage ?? '❌ 所有方法都失败了！无法获取照片数据');
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (e, stackTrace) {
-      _updateDebugInfo('❌ 加载照片时出错: $e');
-      debugPrint('完整错误: $e');
-      debugPrint('堆栈: $stackTrace');
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
 
   /// 处理照片选择
   ///
@@ -299,24 +126,6 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Pic Tidy'),
-        actions: [
-          // 权限相关按钮移到AppBar
-          IconButton(
-            icon: const Icon(Icons.lock_open),
-            tooltip: '请求权限',
-            onPressed: _isLoading ? null : _requestPermission,
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            tooltip: '检查权限',
-            onPressed: _isLoading ? null : _checkPermissionStatus,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: '系统设置',
-            onPressed: _isLoading ? null : _openSystemSettings,
-          ),
-        ],
       ),
       body: Row(
         children: [
