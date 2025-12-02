@@ -1,13 +1,19 @@
-import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:photo_manager/photo_manager.dart';
+import 'services/permission_service.dart';
+import 'services/photo_service.dart';
+import 'widgets/debug_info_card.dart';
+import 'widgets/action_buttons.dart';
+import 'widgets/photo_display_card.dart';
 
+/// 应用程序入口
 void main() {
   runApp(const MyApp());
 }
 
+/// 主应用组件
+///
+/// 配置应用主题和路由
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -15,15 +21,15 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Pic Tidy',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple), useMaterial3: true),
       home: const MyHomePage(),
     );
   }
 }
 
+/// 主页面组件
+///
+/// 负责管理权限检查和照片加载的UI界面
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
 
@@ -31,12 +37,23 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
+/// 主页面状态类
+///
+/// 管理页面状态，包括：
+/// - 权限状态
+/// - 照片数据
+/// - 加载状态
+/// - 调试信息
 class _MyHomePageState extends State<MyHomePage> {
+  // 服务实例
+  final PermissionService _permissionService = PermissionService();
+  final PhotoService _photoService = PhotoService();
+
+  // 状态变量
   String? _firstImagePath;
   Uint8List? _firstImageData;
   bool _isLoading = false;
   String _debugInfo = '正在初始化...';
-  PermissionState? _currentPermissionState;
 
   @override
   void initState() {
@@ -47,6 +64,10 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  /// 检查权限并加载照片
+  ///
+  /// 启动时自动调用，先检查权限状态，如果有权限则加载照片
+  /// 在 macOS 上，即使权限检查显示未授权，也可能实际已授权，所以会尝试直接加载
   Future<void> _checkAndLoadPhoto() async {
     setState(() {
       _isLoading = true;
@@ -55,14 +76,12 @@ class _MyHomePageState extends State<MyHomePage> {
 
     try {
       // 检查当前权限状态
-      final PermissionState state = await PhotoManager.requestPermissionExtend();
-      _currentPermissionState = state;
-      
-      _updateDebugInfo('权限状态: isAuth=${state.isAuth}, isLimited=${state.isLimited}, hasAccess=${state.hasAccess}');
-      
-      // 在 macOS 上，即使 isAuth 为 false，也可能权限已授予（系统设置中显示已授权）
-      // 所以直接尝试加载照片，如果失败再提示用户
-      if (state.isAuth || state.isLimited || state.hasAccess) {
+      final state = await _permissionService.checkPermissionStatus();
+      final statusText = _permissionService.formatPermissionStatus(state);
+      _updateDebugInfo('权限状态: $statusText');
+
+      // 判断是否有权限
+      if (_permissionService.hasPermission(state)) {
         // 权限状态显示已授予，直接加载照片
         _updateDebugInfo('权限状态显示已授予，正在加载照片...');
         await _loadFirstPhoto();
@@ -95,6 +114,9 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  /// 检查权限状态
+  ///
+  /// 手动检查当前权限状态，并显示详细信息
   Future<void> _checkPermissionStatus() async {
     setState(() {
       _isLoading = true;
@@ -102,22 +124,15 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     try {
-      final PermissionState state = await PhotoManager.requestPermissionExtend();
-      _currentPermissionState = state;
-      
+      final state = await _permissionService.checkPermissionStatus();
+      final statusText = _permissionService.formatPermissionStatus(state);
+
       setState(() {
         _isLoading = false;
-        _debugInfo = '权限状态:\n'
-            'isAuth: ${state.isAuth}\n'
-            'isLimited: ${state.isLimited}\n'
-            'hasAccess: ${state.hasAccess}\n'
-            '状态: ${state.toString()}';
+        _debugInfo = statusText;
       });
-      
+
       debugPrint('权限状态检查:');
-      debugPrint('  isAuth: ${state.isAuth}');
-      debugPrint('  isLimited: ${state.isLimited}');
-      debugPrint('  hasAccess: ${state.hasAccess}');
       debugPrint('  完整状态: $state');
     } catch (e) {
       setState(() {
@@ -128,6 +143,10 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  /// 请求照片访问权限
+  ///
+  /// 弹出系统权限对话框，请求用户授权
+  /// 如果授权成功，会自动加载照片
   Future<void> _requestPermission() async {
     setState(() {
       _isLoading = true;
@@ -135,31 +154,24 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     try {
-      // 明确请求权限
-      final PermissionState state = await PhotoManager.requestPermissionExtend();
-      _currentPermissionState = state;
-      
+      final state = await _permissionService.requestPermission();
+      final statusText = _permissionService.formatPermissionStatus(state);
+
       debugPrint('权限请求结果:');
-      debugPrint('  isAuth: ${state.isAuth}');
-      debugPrint('  isLimited: ${state.isLimited}');
-      debugPrint('  hasAccess: ${state.hasAccess}');
-      
-      if (state.isAuth || state.isLimited) {
+      debugPrint('  完整状态: $state');
+
+      if (_permissionService.hasPermission(state)) {
         setState(() {
           _isLoading = false;
-          _debugInfo = '✅ 权限已授予！\n'
-              'isAuth: ${state.isAuth}\n'
-              'isLimited: ${state.isLimited}';
+          _debugInfo = '✅ 权限已授予！\n$statusText';
         });
         // 权限已授予，加载照片
         await _loadFirstPhoto();
       } else {
         setState(() {
           _isLoading = false;
-          _debugInfo = '❌ 权限被拒绝\n'
-              'isAuth: ${state.isAuth}\n'
-              'isLimited: ${state.isLimited}\n'
-              'hasAccess: ${state.hasAccess}\n\n'
+          _debugInfo =
+              '❌ 权限被拒绝\n$statusText\n\n'
               '请点击"打开系统设置"按钮手动授权';
         });
       }
@@ -173,23 +185,31 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  /// 打开系统设置页面
+  ///
+  /// 引导用户到系统设置中手动授权照片访问权限
   Future<void> _openSystemSettings() async {
     try {
-      await PhotoManager.openSetting();
+      await _permissionService.openSystemSettings();
       setState(() {
-        _debugInfo = '已打开系统设置\n'
+        _debugInfo =
+            '已打开系统设置\n'
             '请在"隐私与安全性" > "照片"中找到应用并授权\n'
             '授权后点击"检查权限状态"按钮';
       });
     } catch (e) {
       setState(() {
-        _debugInfo = '无法打开系统设置: $e\n'
+        _debugInfo =
+            '无法打开系统设置: $e\n'
             '请手动打开: 系统设置 > 隐私与安全性 > 照片';
       });
       debugPrint('打开系统设置失败: $e');
     }
   }
 
+  /// 加载第一张照片
+  ///
+  /// 从相册中加载第一张照片，并更新UI显示
   Future<void> _loadFirstPhoto() async {
     try {
       setState(() {
@@ -197,115 +217,26 @@ class _MyHomePageState extends State<MyHomePage> {
         _debugInfo = '正在获取相册列表...';
       });
 
-      // 直接尝试获取相册列表，如果失败会抛出异常
-      final List<AssetPathEntity> paths = await PhotoManager.getAssetPathList(
-        type: RequestType.image,
-        hasAll: true,
-      ).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          throw TimeoutException('获取相册列表超时');
-        },
-      );
-      
-      _updateDebugInfo('找到 ${paths.length} 个相册');
+      // 使用照片服务加载照片
+      final result = await _photoService.loadFirstPhoto();
 
-      if (paths.isEmpty) {
-        _updateDebugInfo('❌ 未找到任何相册');
+      if (result.success && result.hasData) {
+        // 加载成功
+        _updateDebugInfo(
+          result.filePath != null ? '✅ 成功！文件路径: ${result.filePath}' : '✅ 成功！数据大小: ${result.imageData!.length} 字节',
+        );
+        setState(() {
+          _firstImagePath = result.filePath;
+          _firstImageData = result.imageData;
+          _isLoading = false;
+        });
+      } else {
+        // 加载失败
+        _updateDebugInfo(result.errorMessage ?? '❌ 所有方法都失败了！无法获取照片数据');
         setState(() {
           _isLoading = false;
         });
-        return;
       }
-
-      final AssetPathEntity firstPath = paths.first;
-      _updateDebugInfo('正在从相册"${firstPath.name}"获取照片...');
-      
-      final List<AssetEntity> assets = await firstPath.getAssetListPaged(
-        page: 0,
-        size: 1,
-      );
-      _updateDebugInfo('获取到 ${assets.length} 张照片');
-
-      if (assets.isEmpty) {
-        _updateDebugInfo('❌ 相册中没有照片');
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final AssetEntity firstAsset = assets.first;
-      _updateDebugInfo('正在获取照片数据...');
-      
-      // 方法1: 尝试获取文件
-      try {
-        final file = await firstAsset.originFile;
-        if (file != null) {
-          _updateDebugInfo('✅ 成功！文件路径: ${file.path}');
-          setState(() {
-            _firstImagePath = file.path;
-            _firstImageData = null;
-            _isLoading = false;
-          });
-          return;
-        }
-      } catch (e) {
-        _updateDebugInfo('originFile 失败: $e');
-      }
-
-      // 方法2: 尝试获取图片数据
-      try {
-        final imageData = await firstAsset.originBytes;
-        if (imageData != null && imageData.isNotEmpty) {
-          _updateDebugInfo('✅ 成功！数据大小: ${imageData.length} 字节');
-          setState(() {
-            _firstImagePath = null;
-            _firstImageData = imageData;
-            _isLoading = false;
-          });
-          return;
-        }
-      } catch (e) {
-        _updateDebugInfo('originBytes 失败: $e');
-      }
-
-      // 方法3: 尝试 file
-      try {
-        final file = await firstAsset.file;
-        if (file != null) {
-          _updateDebugInfo('✅ 成功！文件路径: ${file.path}');
-          setState(() {
-            _firstImagePath = file.path;
-            _firstImageData = null;
-            _isLoading = false;
-          });
-          return;
-        }
-      } catch (e) {
-        _updateDebugInfo('file 失败: $e');
-      }
-
-      // 方法4: 尝试缩略图
-      try {
-        final thumbnailData = await firstAsset.thumbnailData;
-        if (thumbnailData != null && thumbnailData.isNotEmpty) {
-          _updateDebugInfo('✅ 成功！缩略图大小: ${thumbnailData.length} 字节');
-          setState(() {
-            _firstImagePath = null;
-            _firstImageData = thumbnailData;
-            _isLoading = false;
-          });
-          return;
-        }
-      } catch (e) {
-        _updateDebugInfo('thumbnailData 失败: $e');
-      }
-
-      _updateDebugInfo('❌ 所有方法都失败了！无法获取照片数据');
-      setState(() {
-        _isLoading = false;
-      });
     } catch (e, stackTrace) {
       _updateDebugInfo('❌ 加载照片时出错: $e');
       debugPrint('完整错误: $e');
@@ -316,6 +247,9 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  /// 更新调试信息
+  ///
+  /// 同时更新状态和打印日志
   void _updateDebugInfo(String info) {
     debugPrint(info);
     setState(() {
@@ -326,117 +260,28 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Pic Tidy'),
-      ),
+      appBar: AppBar(backgroundColor: Theme.of(context).colorScheme.inversePrimary, title: const Text('Pic Tidy')),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 调试信息
-              Card(
-                color: Colors.blue[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '调试信息',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _debugInfo,
-                        style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              // 调试信息卡片
+              DebugInfoCard(debugInfo: _debugInfo),
               const SizedBox(height: 20),
-              // 按钮组
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                alignment: WrapAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _requestPermission,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    ),
-                    icon: const Icon(Icons.lock_open),
-                    label: const Text('请求权限'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _checkPermissionStatus,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    ),
-                    icon: const Icon(Icons.info_outline),
-                    label: const Text('检查权限状态'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _openSystemSettings,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    ),
-                    icon: const Icon(Icons.settings),
-                    label: const Text('打开系统设置'),
-                  ),
-                ],
+              // 操作按钮组
+              ActionButtons(
+                isLoading: _isLoading,
+                onRequestPermission: _requestPermission,
+                onCheckPermission: _checkPermissionStatus,
+                onOpenSettings: _openSystemSettings,
               ),
-              if (_isLoading) ...[
-                const SizedBox(height: 20),
-                const Center(child: CircularProgressIndicator()),
-              ],
+              // 加载指示器
+              if (_isLoading) ...[const SizedBox(height: 20), const Center(child: CircularProgressIndicator())],
               const SizedBox(height: 20),
-              // 图片显示
-              if (_firstImagePath != null || _firstImageData != null)
-                Card(
-                  elevation: 4,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                      children: [
-                        const Text(
-                          '第一张照片',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _firstImagePath != null
-                            ? Image.file(
-                                File(_firstImagePath!),
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Text('加载失败: $error');
-                                },
-                              )
-                            : Image.memory(
-                                _firstImageData!,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Text('加载失败: $error');
-                                },
-                              ),
-                      ],
-                    ),
-                  ),
-                ),
+              // 照片显示卡片
+              PhotoDisplayCard(imagePath: _firstImagePath, imageData: _firstImageData),
             ],
           ),
         ),
